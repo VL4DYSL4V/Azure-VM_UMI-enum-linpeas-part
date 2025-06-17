@@ -12,60 +12,55 @@
 # Fat linpeas: 0
 # Small linpeas: 1
 
+HEADER="Metadata:true"
+URL="http://169.254.169.254/metadata"
+UMI_CLIENT_ID="cd71c0b6-43ea-4e1e-baf5-466e1a7f1ec4"
+API_VERSION="2021-12-13" #https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=linux#supported-api-versions
 
-if [ "$is_az_vm" = "Yes" ]; then
-  print_2title "Azure VM Enumeration"
+az_req=""
+if [ "$(command -v curl || echo -n '')" ]; then
+    az_req="curl -s -f -L -H '$HEADER'"
+elif [ "$(command -v wget || echo -n '')" ]; then
+    az_req="wget -q -O - --header '$HEADER'"
+else 
+    echo "Neither curl nor wget were found, I can't enumerate the metadata service :("
+fi
 
-  HEADER="Metadata:true"
-  URL="http://169.254.169.254/metadata"
-  UMI_CLIENT_ID="cd71c0b6-43ea-4e1e-baf5-466e1a7f1ec4"
-  API_VERSION="2021-12-13" #https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=linux#supported-api-versions
+if [ "$az_req" ]; then
+  print_3title "Instance details"
+  exec_with_jq eval $az_req "$URL/instance?api-version=$API_VERSION"
+  echo ""
+
+  print_3title "Load Balancer details"
+  exec_with_jq eval $az_req "$URL/loadbalancer?api-version=$API_VERSION"
+  echo ""
+
+  print_3title "User Data"
+  exec_with_jq eval $az_req "$URL/instance/compute/userData?api-version=$API_VERSION\&format=text" | base64 -d 2>/dev/null
+  echo ""
+
+  print_3title "Custom Data and other configs (root needed)"
+  (cat /var/lib/waagent/ovf-env.xml || cat /var/lib/waagent/CustomData/ovf-env.xml) 2>/dev/null | sed "s,CustomData.*,${SED_RED},"
+  echo ""
+
+  print_3title "Management token"
+  print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
+  exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://management.azure.com/\&client_id=$UMI_CLIENT_ID"
+  echo ""
+
+  print_3title "Graph token"
+  print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
+  exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://graph.microsoft.com/\&client_id=$UMI_CLIENT_ID"
+  echo ""
   
-  az_req=""
-  if [ "$(command -v curl || echo -n '')" ]; then
-      az_req="curl -s -f -L -H '$HEADER'"
-  elif [ "$(command -v wget || echo -n '')" ]; then
-      az_req="wget -q -O - --header '$HEADER'"
-  else 
-      echo "Neither curl nor wget were found, I can't enumerate the metadata service :("
-  fi
+  print_3title "Vault token"
+  print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
+  exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://vault.azure.net/\&client_id=$UMI_CLIENT_ID"
+  echo ""
 
-  if [ "$az_req" ]; then
-    print_3title "Instance details"
-    exec_with_jq eval $az_req "$URL/instance?api-version=$API_VERSION"
-    echo ""
-
-    print_3title "Load Balancer details"
-    exec_with_jq eval $az_req "$URL/loadbalancer?api-version=$API_VERSION"
-    echo ""
-
-    print_3title "User Data"
-    exec_with_jq eval $az_req "$URL/instance/compute/userData?api-version=$API_VERSION\&format=text" | base64 -d 2>/dev/null
-    echo ""
-
-    print_3title "Custom Data and other configs (root needed)"
-    (cat /var/lib/waagent/ovf-env.xml || cat /var/lib/waagent/CustomData/ovf-env.xml) 2>/dev/null | sed "s,CustomData.*,${SED_RED},"
-    echo ""
-
-    print_3title "Management token"
-    print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
-    exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://management.azure.com/\&client_id=$UMI_CLIENT_ID"
-    echo ""
-
-    print_3title "Graph token"
-    print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
-    exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://graph.microsoft.com/\&client_id=$UMI_CLIENT_ID"
-    echo ""
-    
-    print_3title "Vault token"
-    print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
-    exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://vault.azure.net/\&client_id=$UMI_CLIENT_ID"
-    echo ""
-
-    print_3title "Storage token"
-    print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
-    exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://storage.azure.com/\&client_id=$UMI_CLIENT_ID"
-    echo ""
-  fi
+  print_3title "Storage token"
+  print_info "It's possible to assign 1 system MI and several user MI to a VM. LinPEAS can only get the token from the default one. More info in https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/cloud-ssrf.html#azure-vm"
+  exec_with_jq eval $az_req "$URL/identity/oauth2/token?api-version=$API_VERSION\&resource=https://storage.azure.com/\&client_id=$UMI_CLIENT_ID"
   echo ""
 fi
+echo ""
